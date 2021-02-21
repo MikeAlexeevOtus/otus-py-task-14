@@ -1,0 +1,13 @@
+*.pyc
+*.so
+*.todo
+*.todo
+
+.*.sw?
+.venv
+
+build
+data
+deviceapps.pb-c.*
+pb.egg-info
+tags
