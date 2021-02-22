@@ -1,7 +1,11 @@
 import time
 import asyncio
+import hashlib
 
+import os
 import aiohttp
+import aiofiles
+import aiofiles.os
 from bs4 import BeautifulSoup
 
 
@@ -16,8 +20,13 @@ async def get_page_content(url):
         return await resp.read()
 
 
-async def save_page_content(url):
+async def save_page_content(url, output_folder):
     print(f'save page {url}')
+    content = await get_page_content(url)
+    hash_ = hashlib.sha256(url.encode()).hexdigest()
+    output_path = os.path.join(output_folder, hash_)
+    async with aiofiles.open(output_path, 'wb') as f:
+        await f.write(content)
 
 
 def parse_main_page(page_content):
@@ -40,12 +49,22 @@ def parse_comments_urls(page_content):
     pass
 
 
-async def do_requests(already_seen_news):
+async def create_folders(output_folder, news_ids):
+    print('create folders', output_folder, news_ids)
+    todo = [aiofiles.os.mkdir(os.path.join(output_folder, str(id_)))
+            for id_ in news_ids]
+
+    await asyncio.wait(todo)
+
+
+async def do_requests(already_seen_news, output_folder):
     main_page_content = await get_page_content(BASE_URL + '/newest')
     news_ids_with_urls = parse_main_page(main_page_content)
     # TODO DO FILTER
+    await create_folders(output_folder, news_ids_with_urls.keys())
     # comment_urls = [f'{BASE_URL}/item?id={id_}' for id_ in news_ids_with_urls]
-    todo = [save_page_content(url, ) for url in news_ids_with_urls.values()]
+    todo = [save_page_content(url, os.path.join(output_folder, str(id_)))
+            for id_, url in news_ids_with_urls.items()]
     # todo += [get_page_content(url) for url in comment_urls]
     await asyncio.wait(todo)
     # coments_tasks = [get_page_content(url) for url in news_urls]
@@ -59,8 +78,10 @@ async def do_requests(already_seen_news):
 
 def main():
     already_seen_news = set()
+    out_folder = 'out'
     while True:
-        asyncio.run(do_requests(already_seen_news), debug=True)
+        asyncio.run(do_requests(already_seen_news, out_folder), debug=True)
+        break
         time.sleep(3)
 
 
