@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import os
 import time
+import sys
 
 import aiohttp
 import aiofiles
@@ -10,6 +11,7 @@ from bs4 import BeautifulSoup
 
 
 BASE_URL = 'https://news.ycombinator.com'
+SLEEP_SECONDS = 5
 MAX_REQUESTS = 5
 
 
@@ -101,10 +103,11 @@ async def do_requests(already_seen_news, output_folder):
 
 def main():
     already_seen_news = set()
-    out_folder = 'out'
+    out_folder = sys.argv[1]
+    os.makedirs(out_folder)
     while True:
         asyncio.run(do_requests(already_seen_news, out_folder), debug=True)
-        time.sleep(3)
+        time.sleep(SLEEP_SECONDS)
 
 
 if __name__ == '__main__':
