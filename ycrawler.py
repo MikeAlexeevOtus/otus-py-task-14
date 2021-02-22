@@ -1,8 +1,8 @@
-import time
 import asyncio
 import hashlib
-
 import os
+import time
+
 import aiohttp
 import aiofiles
 import aiofiles.os
@@ -29,6 +29,32 @@ async def save_page_content(url, output_folder):
         await f.write(content)
 
 
+async def save_pages_content_from_comments(url, output_folder):
+    print(f'save from comments {url}')
+    comments_content = await get_page_content(url)
+    external_links = parse_comments_page(comments_content)
+    if external_links:
+        print('external_links', external_links)
+        todo = [save_page_content(url_, output_folder) for url_ in external_links]
+        await asyncio.wait(todo)
+
+
+def parse_comments_page(page_content):
+    soup = BeautifulSoup(page_content, 'html.parser')
+    comments_tree = soup.find('table', class_='comment-tree')
+    if not comments_tree:
+        return []
+
+    out_links = []
+    for a_elem in comments_tree.find_all('a'):
+        link = a_elem['href']
+        if not link.startswith('http'):
+            continue
+        out_links.append(link)
+
+    return out_links
+
+
 def parse_main_page(page_content):
     """ returns dict of {id: url} """
     soup = BeautifulSoup(page_content, 'html.parser')
@@ -44,11 +70,6 @@ def parse_main_page(page_content):
     return ids_with_urls
 
 
-def parse_comments_urls(page_content):
-    # => list of urls
-    pass
-
-
 async def create_folders(output_folder, news_ids):
     print('create folders', output_folder, news_ids)
     todo = [aiofiles.os.mkdir(os.path.join(output_folder, str(id_)))
@@ -59,21 +80,23 @@ async def create_folders(output_folder, news_ids):
 
 async def do_requests(already_seen_news, output_folder):
     main_page_content = await get_page_content(BASE_URL + '/newest')
-    news_ids_with_urls = parse_main_page(main_page_content)
-    # TODO DO FILTER
+    news_ids_with_urls = {id_: url for id_, url in parse_main_page(main_page_content).items()
+                          if id_ not in already_seen_news}
+
+    if not news_ids_with_urls:
+        print('no new news')
+        return
+
     await create_folders(output_folder, news_ids_with_urls.keys())
-    # comment_urls = [f'{BASE_URL}/item?id={id_}' for id_ in news_ids_with_urls]
+    news_ids_with_comment_urls = {id_: f'{BASE_URL}/item?id={id_}' for id_ in news_ids_with_urls}
     todo = [save_page_content(url, os.path.join(output_folder, str(id_)))
             for id_, url in news_ids_with_urls.items()]
-    # todo += [get_page_content(url) for url in comment_urls]
+
+    todo += [save_pages_content_from_comments(url, os.path.join(output_folder, str(id_)))
+             for id_, url in news_ids_with_comment_urls.items()]
+
     await asyncio.wait(todo)
-    # coments_tasks = [get_page_content(url) for url in news_urls]
-    # for task in news_tasks:
-    #   queue for save
-    #   load comments page
-    # queue for save
-    # wait requests
-    # wait queue
+    already_seen_news.update(news_ids_with_urls.keys())
 
 
 def main():
@@ -81,7 +104,6 @@ def main():
     out_folder = 'out'
     while True:
         asyncio.run(do_requests(already_seen_news, out_folder), debug=True)
-        break
         time.sleep(3)
 
 
